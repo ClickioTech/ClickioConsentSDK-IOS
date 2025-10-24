@@ -28,8 +28,9 @@ public final class WebViewController: UIViewController {
         let sharedDataStore = WKWebsiteDataStore.default()
         
         let userContentController = WKUserContentController()
+        let userDefaults = UserDefaults.standard
         
-        if customConfig != nil {
+        if userDefaults.bool(forKey: "consentAccepted") {
             let readWriteBridge = """
                 (function() {
                     window.clickioSDK = window.clickioSDK || {};
@@ -235,6 +236,9 @@ extension WebViewController: WKScriptMessageHandler {
     private func handleReadyAction() {
         logger.log("Ready method was called", level: .info)
         ClickioConsentSDK.shared.updateConsentStatus()
+        let userDefaults = UserDefaults.standard
+        userDefaults.set(true, forKey: "consentAccepted")
+        
         self.dismiss(animated: true, completion: nil)
     }
 }
