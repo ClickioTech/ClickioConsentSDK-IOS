@@ -30,20 +30,24 @@ public final class WebViewController: UIViewController {
         let userContentController = WKUserContentController()
         
         if customConfig != nil {
-            let readBridge = """
-            (function() {
-                window.clickioSDK = window.clickioSDK || {};
-                const originalRead = window.clickioSDK.read;
-            
-                window.clickioSDK.read = function(key) {
-                    window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'read', data: key });
-                    if (originalRead) originalRead.apply(this, arguments);
-                };
-            })();
-            """
+            let readWriteBridge = """
+                (function() {
+                    window.clickioSDK = window.clickioSDK || {};
+                    if (window.clickioSDK._patched) return;
+                    window.clickioSDK._patched = true;
+                
+                    window.clickioSDK.write = function(data) {
+                        return true;
+                    };
+                
+                    window.clickioSDK.read = function(key) {
+                        return true;
+                    };
+                })();
+                """
             userContentController.addUserScript(
                 WKUserScript(
-                    source: readBridge,
+                    source: readWriteBridge,
                     injectionTime: .atDocumentStart,
                     forMainFrameOnly: false
                 )
@@ -88,7 +92,7 @@ public final class WebViewController: UIViewController {
         webView.uiDelegate = self
         webView.navigationDelegate = self
         
-        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.isScrollEnabled = true
         webView.scrollView.bounces = false
         
         webView.translatesAutoresizingMaskIntoConstraints = false
