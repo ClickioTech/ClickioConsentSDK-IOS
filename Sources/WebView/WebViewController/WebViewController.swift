@@ -30,29 +30,13 @@ public final class WebViewController: UIViewController {
         let userContentController = WKUserContentController()
         let userDefaults = UserDefaults.standard
         
-        if userDefaults.bool(forKey: "consentAccepted") {
-            let readWriteBridge = """
-                (function() {
-                    window.clickioSDK = window.clickioSDK || {};
-                    if (window.clickioSDK._patched) return;
-                    window.clickioSDK._patched = true;
-                
-                    window.clickioSDK.write = function(data) {
-                        return true;
-                    };
-                
-                    window.clickioSDK.read = function(key) {
-                        return true;
-                    };
-                })();
-                """
+        if customConfig != nil {
+            let preloadScript = preloadConsentDataScript()
             userContentController.addUserScript(
                 WKUserScript(
-                    source: readWriteBridge,
+                    source: preloadScript,
                     injectionTime: .atDocumentStart,
-                    forMainFrameOnly: false
-                )
-            )
+                    forMainFrameOnly: false))
         } else {
             let fullBridge = """
             (function() {
@@ -78,7 +62,8 @@ public final class WebViewController: UIViewController {
             })();
             """
             
-            userContentController.addUserScript(WKUserScript(
+            userContentController.addUserScript(
+                WKUserScript(
                 source: fullBridge,
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: false))
@@ -173,6 +158,44 @@ public final class WebViewController: UIViewController {
             self.completion = nil
         }
     }
+    
+    func preloadConsentDataScript() -> String {
+        let defaults = UserDefaults.standard
+        let storedValues = defaults.dictionaryRepresentation()
+        let jsonData = try! JSONSerialization.data(withJSONObject: storedValues, options: [])
+        let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
+
+        return """
+        (function() {
+            window.clickioSDK = window.clickioSDK || {};
+
+            window.clickioSDK.preloaded = \(jsonString);
+
+            const originalWrite = window.clickioSDK.write;
+            const originalRead = window.clickioSDK.read;
+            const originalReady = window.clickioSDK.ready;
+
+            // Write
+            window.clickioSDK.write = function(data) {
+                window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'write', data: data });
+                if (originalWrite) originalWrite.apply(this, arguments);
+            };
+
+            // Read
+            window.clickioSDK.read = function(key) {
+                window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'read', data: key });
+
+                if (window.clickioSDK.preloaded && key in window.clickioSDK.preloaded) {
+                    return window.clickioSDK.preloaded[key];
+                }
+
+                if (originalRead) return originalRead.apply(this, arguments);
+
+                return null;
+            };
+        })();
+        """
+    }
 }
 
 // MARK: - WKScriptMessageHandler
@@ -183,26 +206,21 @@ extension WebViewController: WKScriptMessageHandler {
               let body = message.body as? [String: Any],
               let action = body["action"] as? String else { return }
         
-        if customConfig != nil {
-            guard action == "read" else { return }
+        if customConfig != nil && action == "ready" { return }
+        
+        switch action {
+        case "write":
+            if let jsonString = body["data"] as? String {
+                handleWriteAction(jsonString: jsonString)
+            }
+        case "read":
             if let key = body["data"] as? String {
                 handleReadAction(key: key)
             }
-        } else {
-            switch action {
-            case "write":
-                if let jsonString = body["data"] as? String {
-                    handleWriteAction(jsonString: jsonString)
-                }
-            case "read":
-                if let key = body["data"] as? String {
-                    handleReadAction(key: key)
-                }
-            case "ready":
-                handleReadyAction()
-            default:
-                break
-            }
+        case "ready":
+            handleReadyAction()
+        default:
+            break
         }
     }
     
@@ -236,9 +254,6 @@ extension WebViewController: WKScriptMessageHandler {
     private func handleReadyAction() {
         logger.log("Ready method was called", level: .info)
         ClickioConsentSDK.shared.updateConsentStatus()
-        let userDefaults = UserDefaults.standard
-        userDefaults.set(true, forKey: "consentAccepted")
-        
         self.dismiss(animated: true, completion: nil)
     }
 }
