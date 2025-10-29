@@ -160,15 +160,61 @@ public final class WebViewController: UIViewController {
     }
     
     func preloadConsentDataScript() -> String {
+        func makeJSONCompatible(_ any: Any) -> Any? {
+            if let s = any as? String { return s }
+            if let n = any as? NSNumber { return n }
+            if any is NSNull { return NSNull() }
+
+            if let data = any as? Data {
+                return data.base64EncodedString()
+            }
+            if let url = any as? URL {
+                return url.absoluteString
+            }
+            if let date = any as? Date {
+                return ISO8601DateFormatter().string(from: date)
+            }
+            if let arr = any as? [Any] {
+                return arr.compactMap { makeJSONCompatible($0) }
+            }
+            if let dict = any as? [String: Any] {
+                var out = [String: Any]()
+                for (k, v) in dict {
+                    if let vv = makeJSONCompatible(v) {
+                        out[k] = vv
+                    }
+                }
+                return out
+            }
+            return String(describing: any)
+        }
+
         let defaults = UserDefaults.standard
-        let storedValues = defaults.dictionaryRepresentation()
-        let jsonData = try! JSONSerialization.data(withJSONObject: storedValues, options: [])
+        let all = defaults.dictionaryRepresentation()
+
+        var safe = [String: Any]()
+        for (k, v) in all {
+            if let converted = makeJSONCompatible(v) {
+                safe[k] = converted
+            }
+        }
+
+        let jsonData: Data
+        do {
+            if !JSONSerialization.isValidJSONObject(safe) {
+                throw NSError(domain: "JSON", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a valid JSON object"])
+            }
+            jsonData = try JSONSerialization.data(withJSONObject: safe, options: [])
+        } catch {
+            logger.log("Failed to create JSON for preload: \(error.localizedDescription)", level: .error)
+            jsonData = "{}".data(using: .utf8)!
+        }
+
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
 
         return """
         (function() {
             window.clickioSDK = window.clickioSDK || {};
-
             window.clickioSDK.preloaded = \(jsonString);
 
             const originalWrite = window.clickioSDK.write;
