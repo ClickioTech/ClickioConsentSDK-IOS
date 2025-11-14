@@ -405,6 +405,8 @@ If the Firebase Analytics SDK is present in the project, the Clickio SDK will au
 
 ClickioConsentSDK transmits consent flags immediately if they were updated after showing the consent dialog (when  `onConsentUpdated`  is called) or during initialization if the consent has been accepted.
 
+Also you might need to set default consent values in the app's info.plist as described [here](https://developers.google.com/tag-platform/security/guides/app-consent?consentmode=advanced&platform=ios#set_up_consent_mode).
+
 After successfully transmitting the flags, a log message will be displayed (if logging is enabled) confirming the successful transmission. In case of an error, an error message will appear in the logs. You may need to update Firebase Analytics to a newer version in your project.
 
 ----------
