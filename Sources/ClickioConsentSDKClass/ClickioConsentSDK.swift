@@ -181,10 +181,16 @@ import Combine
         }
         
         switch mode {
+            
         case .default:
             guard mode == .default else { return }
+            
             if attNeeded {
-                logger.log("Showing ATT dialog first, then displaying CMP in default mode only if ATT consent is granted", level: .info)
+                logger.log(
+                    "Showing ATT dialog first, then displaying CMP in default mode only if ATT consent is granted",
+                    level: .info
+                )
+                
                 ATTManager.shared.requestPermission { isGranted in
                     if isGranted {
                         self.showDefaultDialog(
@@ -194,11 +200,13 @@ import Combine
                             completion: completion
                         )
                     } else {
+                        self.webViewManager?.rejectToAll(in: presentingVC)
                         self.logger.log("Dialog not shown: user rejected ATT permission", level: .info)
                     }
                 }
             } else {
                 logger.log("Bypassing ATT flow as not required and showing CMP in default mode", level: .info)
+                
                 self.showDefaultDialog(
                     mode: mode,
                     in: presentingVC,
@@ -209,7 +217,11 @@ import Combine
             
         case .resurface:
             if attNeeded {
-                logger.log("Showing ATT dialog first, then displaying CMP in resurface mode only if ATT consent is granted", level: .info)
+                logger.log(
+                    "Showing ATT dialog first, then displaying CMP in resurface mode only if ATT consent is granted",
+                    level: .info
+                )
+                
                 ATTManager.shared.requestPermission { isGranted in
                     if isGranted {
                         self.showResurfaceDialog(
@@ -219,11 +231,13 @@ import Combine
                             completion: completion
                         )
                     } else {
+                        self.webViewManager?.rejectToAll(in: presentingVC)
                         self.logger.log("Dialog not shown: user rejected ATT permission", level: .info)
                     }
                 }
             } else {
                 logger.log("Bypassing ATT flow as not required and showing CMP in resurface mode", level: .info)
+                
                 showResurfaceDialog(
                     mode: mode,
                     in: presentingVC,
