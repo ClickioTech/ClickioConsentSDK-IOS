@@ -196,7 +196,7 @@ public final class WebViewController: UIViewController {
                 if (originalWrite) originalWrite.apply(this, arguments);
             };
 
-            // Read (синхронный возврат)
+            // Read
             window.clickioSDK.read = function(key) {
                 window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'read', data: key });
 
@@ -265,8 +265,6 @@ extension WebViewController: WKScriptMessageHandler {
         } else {
             logger.log("No value found for key '\(key)'", level: .debug)
         }
-
-        // Больше НИЧЕГО не отправляем обратно в JS
     }
     
     private func handleReadyAction() {
