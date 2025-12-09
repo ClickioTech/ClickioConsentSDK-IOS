@@ -30,44 +30,12 @@ public final class WebViewController: UIViewController {
         let userContentController = WKUserContentController()
         let userDefaults = UserDefaults.standard
         
-        if customConfig != nil {
-            let preloadScript = preloadConsentDataScript()
-            userContentController.addUserScript(
-                WKUserScript(
-                    source: preloadScript,
-                    injectionTime: .atDocumentStart,
-                    forMainFrameOnly: false))
-        } else {
-            let fullBridge = """
-            (function() {
-                window.clickioSDK = window.clickioSDK || {};
-                const originalWrite = window.clickioSDK.write;
-                const originalRead = window.clickioSDK.read;
-                const originalReady = window.clickioSDK.ready;
-
-                window.clickioSDK.write = function(data) {
-                    window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'write', data });
-                    if (originalWrite) originalWrite.apply(this, arguments);
-                };
-
-                window.clickioSDK.read = function(key) {
-                    window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'read', data: key });
-                    if (originalRead) originalRead.apply(this, arguments);
-                };
-
-                window.clickioSDK.ready = function() {
-                    window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'ready' });
-                    if (originalReady) originalReady.apply(this, arguments);
-                };
-            })();
-            """
-            
-            userContentController.addUserScript(
-                WKUserScript(
-                source: fullBridge,
+        let preloadScript = preloadConsentDataScript()
+        userContentController.addUserScript(
+            WKUserScript(
+                source: preloadScript,
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: false))
-        }
         
         // Initialize the webView with the configuration
         webConfiguration.userContentController = userContentController
@@ -165,15 +133,10 @@ public final class WebViewController: UIViewController {
             if let n = any as? NSNumber { return n }
             if any is NSNull { return NSNull() }
 
-            if let data = any as? Data {
-                return data.base64EncodedString()
-            }
-            if let url = any as? URL {
-                return url.absoluteString
-            }
-            if let date = any as? Date {
-                return ISO8601DateFormatter().string(from: date)
-            }
+            if let data = any as? Data { return data.base64EncodedString() }
+            if let url = any as? URL { return url.absoluteString }
+            if let date = any as? Date { return ISO8601DateFormatter().string(from: date) }
+
             if let arr = any as? [Any] {
                 return arr.compactMap { makeJSONCompatible($0) }
             }
@@ -186,6 +149,7 @@ public final class WebViewController: UIViewController {
                 }
                 return out
             }
+
             return String(describing: any)
         }
 
@@ -207,7 +171,12 @@ public final class WebViewController: UIViewController {
             jsonData = try JSONSerialization.data(withJSONObject: safe, options: [])
         } catch {
             logger.log("Failed to create JSON for preload: \(error.localizedDescription)", level: .error)
-            jsonData = "{}".data(using: .utf8)!
+            return """
+            (function() {
+                window.clickioSDK = window.clickioSDK || {};
+                window.clickioSDK.preloaded = {};
+            })();
+            """
         }
 
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
@@ -231,13 +200,18 @@ public final class WebViewController: UIViewController {
             window.clickioSDK.read = function(key) {
                 window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'read', data: key });
 
-                if (window.clickioSDK.preloaded && key in window.clickioSDK.preloaded) {
+                if (window.clickioSDK.preloaded && Object.prototype.hasOwnProperty.call(window.clickioSDK.preloaded, key)) {
                     return window.clickioSDK.preloaded[key];
                 }
 
                 if (originalRead) return originalRead.apply(this, arguments);
-
                 return null;
+            };
+
+            // Ready
+            window.clickioSDK.ready = function() {
+                window.webkit.messageHandlers.clickioSDK.postMessage({ action: 'ready' });
+                if (originalReady) originalReady.apply(this, arguments);
             };
         })();
         """
@@ -284,16 +258,12 @@ extension WebViewController: WKScriptMessageHandler {
     
     private func handleReadAction(key: String) {
         logger.log("Read method was called with key: \(key)", level: .info)
-        
+
         let userDefaults = UserDefaults.standard
         if let value = userDefaults.value(forKey: key) {
             logger.log("Value for key '\(key)': \(value)", level: .debug)
-            let script = "window.clickioSDK.onRead('\(key)', \(value));"
-            webView.evaluateJavaScript(script, completionHandler: nil)
         } else {
             logger.log("No value found for key '\(key)'", level: .debug)
-            let script = "window.clickioSDK.onRead('\(key)', null);"
-            webView.evaluateJavaScript(script, completionHandler: nil)
         }
     }
     
