@@ -6,7 +6,7 @@ Pod::Spec.new do |spec|
   
   spec.module_name  = "ClickioConsentSDKManager"
   
-  spec.version      = "1.0.12-rc"
+  spec.version      = "1.0.13-rc"
   
   spec.summary      = "Native SDK for managing user consents, integrating a WebView-based consent dialog into iOS apps for streamlined privacy compliance."
   
